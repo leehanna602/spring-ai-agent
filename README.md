@@ -53,8 +53,8 @@ Spring AI를 사용하여 Vector DB에 임베딩한 문서 기반으로 답변�
 - 이슈사항) Spring AI에서 아직 Milvus의 다중 컬렉션 지원이 되지 않았습니다.
 - 해결방법) 검색하려는 두 개의 문서는 특징이 달라 다른 컬렉션으로 구성해 사용자 의도를 분석하고 그 결과에 따라 검색하도록 구현하려고 하였습니다. 그러나, 다중 컬렉션을 사용할 수 없어 사용자의 의도를 분석 후 해당하는 문서 정보를 meta 정보에서 필터링하여 검색하도록 구현하였습니다.
 - 참고자료) https://github.com/spring-projects/spring-ai/issues/468
-### 3. stream() 사용 시 글자 유실
-- 이슈사항) Spring AI에서 지원해주는 기능인 Flux를 통해 LLM의 답변을 받아 SSE로 구현하였습니다. 그러나, 글자가 유실되는 현상이 있었고, Spring AI github의 issue에 해당 문제가 제기되어 있는 것을 확인하였습니다.
+### 3. stream() 사용 시 답변의 일부 유실
+- 이슈사항) Spring AI에서 지원해주는 기능인 Flux를 통해 LLM의 답변을 받아 SSE로 구현하였습니다. 그러나, 답변의 일부 글자가 유실되는 현상이 있었고, Spring AI github의 issue에 해당 문제가 제기되어 있는 것을 확인하였습니다.
 - 해결방법) 스트림으로 구현하지 않고 답변 전체를 생성후 답변이 나가도록 하였으며, 그 사이 화면에는 로딩이 보여지도록 하였습니다. Spring AI의 M2 버전에 적용될 것으로 보여 이후에 적용 가능할 것으로 보입니다.
 - 참고자료) https://github.com/spring-projects/spring-ai/issues/876
 
