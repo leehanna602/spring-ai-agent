@@ -24,7 +24,7 @@ Spring AI를 사용하여 Vector DB에 임베딩한 문서 기반으로 답변�
    spring.ai.openai.api-key=${OPENAI_API_KEY}
    ```
 
-2. Milvus DB에는 이미 임베딩이 되어있습니다. 만약, 직접 Milvus DB를 설정하고 싶으시면 다음 Milvus 설정을 변경하면 됩니다.
+2. application.properties에 설정된 Milvus DB에는 이미 임베딩이 되어있습니다. 만약, 직접 Milvus DB를 설정하고 싶으시면 다음 Milvus 설정을 변경하고, '/ai/embedding/my-data' API를 통해 임베딩하실 수 있습니다.
    ```
    spring.ai.vectorstore.milvus.client.host=${MILVUS_IP}
    spring.ai.vectorstore.milvus.client.port=${MILVUS_PORT}
