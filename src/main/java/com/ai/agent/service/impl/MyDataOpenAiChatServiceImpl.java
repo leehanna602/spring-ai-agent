@@ -17,7 +17,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
-import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -43,18 +42,18 @@ public class MyDataOpenAiChatServiceImpl implements OpenAiChatService {
 
 
     /**
-     * Streaming Chat
+     * Chat
      * @param uuid String
      * @param aiChatRequest AiChatRequest
-     * @return Flux<String>
+     * @return String
      */
     @Override
-    public Flux<String> streamChatClient(String uuid, AiChatRequest aiChatRequest) {
+    public String streamAiChatClient(String uuid, AiChatRequest aiChatRequest) {
         // uuid로 대화 이력 확인
         if (!chatHistoryLog.containsKey(uuid)) {
             chatHistoryLog.put(uuid, new ArrayList<>());
         }
-        log.info("chatHistoryLog : {}", chatHistoryLog);
+        log.info("대화 이력: {}", chatHistoryLog);
 
         // 대화 이력 조회
         String history;
@@ -69,42 +68,78 @@ public class MyDataOpenAiChatServiceImpl implements OpenAiChatService {
 
         // 사용자 의도 분류
         MyDataRequestClassifyResponse myDataRequestClassifyResponse = myDataRequestClassifyResponse(aiChatRequest);
-        log.info("myDataRequestClassifyResponse : {}", myDataRequestClassifyResponse);
-        String fileName = myDataRequestClassifyResponse.result().getFileName();
-
-        if (!fileName.equals(MyDataDocType.MY_DATA_GUIDE.getFileName()) && !fileName.equals(MyDataDocType.MY_DATA_API.getFileName())) {
-            fileName = null;
-        }
+        MyDataDocType docType = myDataRequestClassifyResponse.result();
+        log.info("사용자 의도 분류 결과: {}", docType);
 
         // 문서 검색
-        List<Document> docs = this.searchDocs(aiChatRequest, fileName);
-        log.info("user message: {}, docs: {}", aiChatRequest.message(), docs);
-        List<String> contentList = docs.stream()
-                .map(Document::getContent)
-                .toList();
+        List<String> contentList;
+        List<Document> docs = new ArrayList<>();
+        if (docType.equals(MyDataDocType.COMMON)) {
+            // 일상대화 문서검색 안함
+            contentList = new ArrayList<>();
 
-        String[] fullContent = {""};
-        return chatClient.prompt()
-                .system(system -> system
-                        .text(MyDataPrompt.systemPrompt)
+        } else if (docType.equals(MyDataDocType.UNCERTAIN)) {
+            // 문서 전체 검색
+            docs = this.searchDocs(aiChatRequest, null);
+            contentList = docs.stream()
+                    .map(Document::getContent)
+                    .toList();
+        } else {
+            // 특정 문서 검색
+            docs = this.searchDocs(aiChatRequest, docType.getFileName());
+            contentList = docs.stream()
+                    .map(Document::getContent)
+                    .toList();
+        }
+        log.info("사용자 질문: {}, 검색문서: {}", aiChatRequest.message(), docs);
+
+
+        Flux<String> response = chatClient.prompt()
+                .system(system -> system.text(MyDataPrompt.systemPrompt)
                         .param("docs", contentList.toString())
                         .param("convLog", history))
                 .user(aiChatRequest.message())
                 .stream()
-                .content()
-                .bufferTimeout(10, Duration.ofMillis(100))
-                .map(chunks -> String.join("", chunks))
-                .doOnNext(contentText -> {
-                    log.info("Buffered content: {}", contentText);
-                    fullContent[0] = fullContent[0] +  contentText;
-                })
-                .doOnComplete(() -> {
-                    assert messages != null;
-                    messages.add(new UserMessage(aiChatRequest.message()));
-                    messages.add(new AssistantMessage(fullContent[0]));
-                    chatHistoryLog.put(uuid, messages);
-                    log.info("uuid: {}, messages: {}", uuid, messages);
-                });
+                .content();
+
+        String content = String.join("", Objects.requireNonNull(response.collectList().block()));
+        log.info("답변: {}", content);
+
+        assert messages != null;
+        messages.add(new UserMessage(aiChatRequest.message()));
+        messages.add(new AssistantMessage(content));
+        chatHistoryLog.put(uuid, messages);
+        log.info("=====> uuid: {}, 결과: {}", uuid, messages);
+
+        return content;
+
+        /** Todo
+         *  - Spring ai의 stream() 사용시 글자가 유실되는 현상이 있어 전체를 한번에 반환하도록 변경해둠
+         *  - 해당 현상은 이후 M2 버전에서 사용 가능
+         *  - 참고 : https://github.com/spring-projects/spring-ai/issues/876
+         *  */
+//        String[] fullContent = {""};
+//        return chatClient.prompt()
+//                .system(system -> system
+//                        .text(MyDataPrompt.systemPrompt)
+//                        .param("docs", contentList.toString())
+//                        .param("convLog", history))
+//                .user(aiChatRequest.message())
+//                .stream()
+//                .content()
+//                .bufferTimeout(10, Duration.ofMillis(100))
+//                .map(chunks -> String.join("", chunks))
+//                .doOnNext(contentText -> {
+//                    log.info("Buffered content: {}", contentText);
+//                    fullContent[0] = fullContent[0] +  contentText;
+//                })
+//                .doOnComplete(() -> {
+//                    assert messages != null;
+//                    messages.add(new UserMessage(aiChatRequest.message()));
+//                    messages.add(new AssistantMessage(fullContent[0]));
+//                    chatHistoryLog.put(uuid, messages);
+//                    log.info("uuid: {}, messages: {}", uuid, messages);
+//                });
     }
 
 
@@ -128,8 +163,15 @@ public class MyDataOpenAiChatServiceImpl implements OpenAiChatService {
      * @param fileName String
      * @return List<Document>
      */
-    private List<Document> searchDocs(AiChatRequest aiChatRequest, String fileName) {
-        if (!fileName.isEmpty()) {
+    public List<Document> searchDocs(AiChatRequest aiChatRequest, String fileName) {
+        if (fileName == null || fileName.isEmpty()) {
+            return vectorStore.similaritySearch(
+                    SearchRequest.query(aiChatRequest.message())
+                            .withTopK(tokK)
+                            .withSimilarityThreshold(thresHold)
+            );
+
+        }else{
             return vectorStore.similaritySearch(
                     SearchRequest.query(aiChatRequest.message())
                             .withTopK(tokK)
@@ -137,12 +179,6 @@ public class MyDataOpenAiChatServiceImpl implements OpenAiChatService {
                             .withFilterExpression("source == '" + fileName + "'")
             );
         }
-        return vectorStore.similaritySearch(
-                SearchRequest.query(aiChatRequest.message())
-                        .withTopK(tokK)
-                        .withSimilarityThreshold(thresHold)
-        );
-
     }
 
 }

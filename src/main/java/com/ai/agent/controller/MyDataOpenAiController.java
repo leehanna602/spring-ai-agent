@@ -15,7 +15,6 @@ import org.springframework.ai.transformer.splitter.TextSplitter;
 import org.springframework.ai.vectorstore.MilvusVectorStore;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
-import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.UUID;
@@ -34,15 +33,16 @@ public class MyDataOpenAiController {
     /* ChatClient */
     @PostMapping(value = "/ai/chat/stream/my-data", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @ResponseBody
-    public Flux<String> completion(HttpSession session, @RequestBody AiChatRequest aiChatRequest) {
+    public String completionStream(HttpSession session, @RequestBody AiChatRequest aiChatRequest) {
         openAiChatClientContext.setOpenAiChatService(new MyDataOpenAiChatServiceImpl(chatClient, vectorStore));
         String uuid = (String) session.getAttribute("uuid");
         if (uuid == null) {
             uuid = UUID.randomUUID().toString();
             session.setAttribute("uuid", uuid);
         }
-        return openAiChatClientContext.streamChatClient(uuid, aiChatRequest);
+        return openAiChatClientContext.streamAiChatClient(uuid, aiChatRequest);
     }
+
 
     /* Embedding - Milvus */
     @PostMapping("/ai/embedding/my-data")
